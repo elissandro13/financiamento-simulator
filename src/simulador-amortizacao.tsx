@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Calculator, Download, TrendingDown, AlertTriangle, CheckCircle, Info } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, PieChart as RePieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, PieChart as RePieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, Legend, ResponsiveContainer } from 'recharts';
+
 
 /**
  * ==================================================================================
@@ -27,6 +28,70 @@ import { LineChart, Line, BarChart, Bar, PieChart as RePieChart, Pie, Cell, XAxi
  * ==================================================================================
  */
 
+type Parcela = {
+  mes: number;
+  prestacao: number;
+  juros: number;
+  amortizacao: number;
+  saldoDevedor: number;
+  saldoFinal: number;
+  emCarencia: boolean;
+  amortizacaoMensal: number;
+};
+
+type Resumo = {
+  totalPago: number;
+  totalJuros: number;
+  totalAmortizacao: number;
+};
+
+type CET = {
+  cetMensal: number;
+  cetAnual: number;
+  valorLiquido: number;
+  totalPago: number;
+  custoTotal: number;
+};
+
+type Capacidade = {
+  nivel: 'seguro' | 'atencao' | 'risco';
+  percentual: number;
+  mensagem: string;
+  cor: string;
+  icon: any;
+};
+
+type Sistema = {
+  parcelas: Parcela[];
+  resumo: Resumo;
+  cet: CET;
+  tir: number;
+  vpl: number;
+  capacidade: Capacidade | null;
+};
+
+type Recomendacao = {
+  sistemaRecomendado: 'SAC' | 'PRICE';
+  pontosSAC: number;
+  pontosPRICE: number;
+  recomendacoes: { tipo: string; sistema: 'SAC' | 'PRICE'; motivo: string; peso: number }[];
+};
+
+type Resultados = {
+  valorPrincipal: number;
+  numParcelas: number;
+  taxaJuros: number;
+  periodoCarencia: number;
+  amortizacaoExtra: { valor: number; mes: number } | null;
+  amortizacaoMensal: number | null;
+  sac: Sistema;
+  price: Sistema;
+  recomendacao: Recomendacao;
+};
+
+const formatarMoeda = (valor: number) =>
+  valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
 const SimuladorAmortizacao = () => {
   
   /**
@@ -45,7 +110,7 @@ const SimuladorAmortizacao = () => {
   const [amortizacaoExtra, setAmortizacaoExtra] = useState('');
   const [mesAmortizacaoExtra, setMesAmortizacaoExtra] = useState('');
   const [amortizacaoMensal, setAmortizacaoMensal] = useState('');
-  const [resultados, setResultados] = useState(null);
+  const [resultados, setResultados] = useState<Resultados | null>(null);
   const [abaAtiva, setAbaAtiva] = useState('resumo');
   const [mostrarAvancado, setMostrarAvancado] = useState(false);
 
@@ -58,8 +123,17 @@ const SimuladorAmortizacao = () => {
    * - Juros = Saldo Devedor × Taxa
    * - Prestação = Amortização + Juros (decrescente)
    */
-  const calcularSAC = (P, n, i, carencia = 0, inflacao = 0, valorExtra = 0, mesExtra = 0, amortMensal = 0) => {
-    const parcelas = [];
+  const calcularSAC = (
+    P: number,
+    n: number,
+    i: number,
+    carencia = 0,
+    inflacao = 0,
+    valorExtra = 0,
+    mesExtra = 0,
+    amortMensal = 0
+  ): Parcela[] => {
+    const parcelas: Parcela[] = [];
     let saldoDevedor = P;
     
     // Período de carência: paga apenas juros (saldo devedor NÃO diminui)
@@ -119,8 +193,17 @@ const SimuladorAmortizacao = () => {
    * - Juros = Saldo Devedor × Taxa (decrescente)
    * - Amortização = Prestação - Juros (crescente)
    */
-  const calcularPRICE = (P, n, i, carencia = 0, inflacao = 0, valorExtra = 0, mesExtra = 0, amortMensal = 0) => {
-    const parcelas = [];
+  const calcularPRICE = (
+    P: number,
+    n: number,
+    i: number,
+    carencia = 0,
+    inflacao = 0,
+    valorExtra = 0,
+    mesExtra = 0,
+    amortMensal = 0
+  ): Parcela[] => {
+    const parcelas: Parcela[] = [];
     let saldoDevedor = P;
     
     // Período de carência
@@ -178,7 +261,13 @@ const SimuladorAmortizacao = () => {
    * FUNÇÃO: calcularCET
    * Custo Efetivo Total - inclui juros, IOF, tarifas e seguros
    */
-  const calcularCET = (parcelas, valorPrincipal, iofValor, tarifasValor, segurosValor) => {
+  const calcularCET = (
+    parcelas: Parcela[],
+    valorPrincipal: number,
+    iofValor: number,
+    tarifasValor: number,
+    segurosValor: number
+  ): CET => {
     const valorLiquido = valorPrincipal - iofValor - tarifasValor;
     const totalPago = parcelas.reduce((sum, p) => sum + p.prestacao, 0) + segurosValor;
     const n = parcelas.length;
@@ -191,7 +280,7 @@ const SimuladorAmortizacao = () => {
    * FUNÇÃO: calcularTIR
    * Taxa Interna de Retorno - usa método de Newton-Raphson
    */
-  const calcularTIR = (valorInicial, parcelas) => {
+  const calcularTIR = (valorInicial: number, parcelas: Parcela[]): number => {
     let tir = 0.01;
     for (let iter = 0; iter < 100; iter++) {
       let vpl = -valorInicial, derivada = 0;
@@ -210,7 +299,7 @@ const SimuladorAmortizacao = () => {
    * FUNÇÃO: calcularVPL
    * Valor Presente Líquido
    */
-  const calcularVPL = (parcelas, valorInicial, taxaDesconto) => {
+  const calcularVPL = (parcelas: Parcela[], valorInicial: number, taxaDesconto: number): number => {
     let vpl = -valorInicial;
     parcelas.forEach((p, index) => {
       vpl += p.prestacao / Math.pow(1 + taxaDesconto, index + 1);
@@ -223,7 +312,7 @@ const SimuladorAmortizacao = () => {
    * Analisa se a prestação está dentro da capacidade financeira
    * Regra: até 30% seguro, 30-40% atenção, >40% risco
    */
-  const analisarCapacidadePagamento = (prestacao, renda) => {
+  const analisarCapacidadePagamento = (prestacao: number, renda: number): Capacidade | null => {
     if (!renda || renda <= 0) return null;
     const percentual = (prestacao / renda) * 100;
     if (percentual <= 30) {
@@ -239,8 +328,14 @@ const SimuladorAmortizacao = () => {
    * FUNÇÃO: recomendarSistema
    * Sistema de recomendação baseado em múltiplos critérios com pesos
    */
-  const recomendarSistema = (sacResumo, priceResumo, renda, primeiraParcelaSAC, prestacaoPRICE) => {
-    const recomendacoes = [];
+  const recomendarSistema = (
+    sacResumo: Resumo,
+    priceResumo: Resumo,
+    renda: number,
+    primeiraParcelaSAC: number,
+    prestacaoPRICE: number
+  ): Recomendacao => {
+    const recomendacoes: { tipo: string; sistema: 'SAC' | 'PRICE'; motivo: string; peso: number }[] = [];
     if (sacResumo.totalPago < priceResumo.totalPago) {
       recomendacoes.push({ tipo: 'custo', sistema: 'SAC', motivo: 'Menor custo total', peso: 3 });
     } else {
@@ -260,7 +355,7 @@ const SimuladorAmortizacao = () => {
     return { sistemaRecomendado: pontosSAC > pontosPRICE ? 'SAC' : 'PRICE', pontosSAC, pontosPRICE, recomendacoes };
   };
 
-  const calcularResumo = (parcelas) => {
+  const calcularResumo = (parcelas: Parcela[]): Resumo => {
     return {
       totalPago: parcelas.reduce((sum, p) => sum + p.prestacao, 0),
       totalJuros: parcelas.reduce((sum, p) => sum + p.juros, 0),
@@ -339,8 +434,6 @@ const SimuladorAmortizacao = () => {
     setAbaAtiva('resumo');
   };
 
-  const formatarMoeda = (valor) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
   const prepararDadosGraficoLinha = () => {
     if (!resultados) return [];
     return resultados.sac.parcelas.map((sac, index) => ({
@@ -348,7 +441,7 @@ const SimuladorAmortizacao = () => {
     }));
   };
 
-  const prepararDadosGraficoPizza = (sistema) => {
+  const prepararDadosGraficoPizza = (sistema: 'sac' | 'price') => {
     if (!resultados) return [];
     const dados = sistema === 'sac' ? resultados.sac : resultados.price;
     return [{ name: 'Juros', value: dados.resumo.totalJuros }, { name: 'Amortização', value: dados.resumo.totalAmortizacao }];
@@ -384,7 +477,7 @@ const SimuladorAmortizacao = () => {
     a.click();
   };
 
-  const IconeCapacidade = ({ capacidade }) => {
+  const IconeCapacidade = ({ capacidade }: { capacidade: Capacidade | null }) => {
     if (!capacidade) return null;
     const Icon = capacidade.icon;
     return <Icon className={`w-5 h-5 ${capacidade.cor}`} />;
@@ -394,7 +487,8 @@ const SimuladorAmortizacao = () => {
    * COMPONENTE: Tooltip
    * Exibe informação explicativa ao passar o mouse
    */
-  const Tooltip = ({ texto }) => {
+  type HintProps = { texto: string };
+  const Hint = ({ texto }: HintProps) => {
     const [mostrar, setMostrar] = useState(false);
     
     return (
@@ -437,7 +531,7 @@ const SimuladorAmortizacao = () => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 Valor (R$) *
-                <Tooltip texto="Valor total do empréstimo/financiamento. Este é o principal (P) que será amortizado. Quanto maior o valor, maiores serão as prestações e o total de juros pagos." />
+                <Hint texto="Valor total do empréstimo/financiamento. Este é o principal (P) que será amortizado. Quanto maior o valor, maiores serão as prestações e o total de juros pagos." />
               </label>
               <input type="number" value={valorEmprestimo} onChange={(e) => setValorEmprestimo(e.target.value)} 
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
@@ -445,7 +539,7 @@ const SimuladorAmortizacao = () => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 Parcelas *
-                <Tooltip texto="Número de meses para pagar (prazo). Quanto mais parcelas, menor cada prestação, mas maior o total de juros pagos ao longo do tempo. Ex: 360 meses = 30 anos." />
+                <Hint texto="Número de meses para pagar (prazo). Quanto mais parcelas, menor cada prestação, mas maior o total de juros pagos ao longo do tempo. Ex: 360 meses = 30 anos." />
               </label>
               <input type="number" value={numParcelas} onChange={(e) => setNumParcelas(e.target.value)}
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
@@ -453,7 +547,7 @@ const SimuladorAmortizacao = () => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 Taxa % mês *
-                <Tooltip texto="Taxa de juros mensal aplicada sobre o saldo devedor. Esta taxa determina quanto você pagará de juros. Ex: 0.80% ao mês = aprox. 10% ao ano. Quanto maior a taxa, maior o custo total." />
+                <Hint texto="Taxa de juros mensal aplicada sobre o saldo devedor. Esta taxa determina quanto você pagará de juros. Ex: 0.80% ao mês = aprox. 10% ao ano. Quanto maior a taxa, maior o custo total." />
               </label>
               <input type="number" step="0.01" value={taxaJuros} onChange={(e) => setTaxaJuros(e.target.value)}
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
@@ -461,7 +555,7 @@ const SimuladorAmortizacao = () => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 Renda (R$)
-                <Tooltip texto="Sua renda mensal para análise de capacidade de pagamento. O sistema avaliará se a prestação não compromete mais de 30-40% da sua renda, indicando se o financiamento é saudável." />
+                <Hint texto="Sua renda mensal para análise de capacidade de pagamento. O sistema avaliará se a prestação não compromete mais de 30-40% da sua renda, indicando se o financiamento é saudável." />
               </label>
               <input type="number" value={rendaMensal} onChange={(e) => setRendaMensal(e.target.value)}
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
@@ -506,7 +600,7 @@ const SimuladorAmortizacao = () => {
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                   Carência (meses)
-                  <Tooltip texto="Período inicial onde você paga apenas os juros, sem amortizar a dívida. O saldo devedor não diminui neste período. Usado em financiamentos estudantis ou construção. Ex: 12 meses de carência." />
+                  <Hint texto="Período inicial onde você paga apenas os juros, sem amortizar a dívida. O saldo devedor não diminui neste período. Usado em financiamentos estudantis ou construção. Ex: 12 meses de carência." />
                 </label>
                 <input type="number" value={periodoCarencia} onChange={(e) => setPeriodoCarencia(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg" />
@@ -514,7 +608,7 @@ const SimuladorAmortizacao = () => {
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                   Inflação % mês
-                  <Tooltip texto="Taxa de inflação mensal para correção monetária das prestações. Simula contratos com correção por IPCA/IGP-M. Ex: 0.40% ao mês ≈ 5% ao ano. Aumenta o valor nominal das prestações ao longo do tempo." />
+                  <Hint texto="Taxa de inflação mensal para correção monetária das prestações. Simula contratos com correção por IPCA/IGP-M. Ex: 0.40% ao mês ≈ 5% ao ano. Aumenta o valor nominal das prestações ao longo do tempo." />
                 </label>
                 <input type="number" step="0.01" value={taxaInflacao} onChange={(e) => setTaxaInflacao(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg" />
@@ -522,7 +616,7 @@ const SimuladorAmortizacao = () => {
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                   IOF (R$)
-                  <Tooltip texto="Imposto sobre Operações Financeiras. Tributo federal cobrado na contratação do crédito. Reduz o valor líquido que você recebe, mas não afeta as prestações. Típico: 0.38% ao dia + 3% do valor total." />
+                  <Hint texto="Imposto sobre Operações Financeiras. Tributo federal cobrado na contratação do crédito. Reduz o valor líquido que você recebe, mas não afeta as prestações. Típico: 0.38% ao dia + 3% do valor total." />
                 </label>
                 <input type="number" value={iof} onChange={(e) => setIof(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg" />
@@ -530,7 +624,7 @@ const SimuladorAmortizacao = () => {
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                   Tarifas (R$)
-                  <Tooltip texto="Tarifas bancárias cobradas na contratação: análise de crédito, cadastro, avaliação de garantia, etc. Valor único descontado no início. Aumenta o CET (Custo Efetivo Total) da operação." />
+                  <Hint texto="Tarifas bancárias cobradas na contratação: análise de crédito, cadastro, avaliação de garantia, etc. Valor único descontado no início. Aumenta o CET (Custo Efetivo Total) da operação." />
                 </label>
                 <input type="number" value={tarifas} onChange={(e) => setTarifas(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg" />
@@ -538,7 +632,7 @@ const SimuladorAmortizacao = () => {
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                   Seguros (R$)
-                  <Tooltip texto="Valor mensal de seguros obrigatórios ou opcionais (morte, invalidez, desemprego, danos ao imóvel). Este valor é SOMADO às prestações. Aumenta significativamente o custo mensal e o CET." />
+                  <Hint texto="Valor mensal de seguros obrigatórios ou opcionais (morte, invalidez, desemprego, danos ao imóvel). Este valor é SOMADO às prestações. Aumenta significativamente o custo mensal e o CET." />
                 </label>
                 <input type="number" value={seguros} onChange={(e) => setSeguros(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg" />
@@ -546,7 +640,7 @@ const SimuladorAmortizacao = () => {
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                   Amort. Extra (R$)
-                  <Tooltip texto="Valor ÚNICO de amortização extraordinária. Simula um pagamento extra em um mês específico (ex: usar 13º salário). Se não especificar o mês, será aplicado no mês 12. Reduz o saldo devedor e economiza juros futuros!" />
+                  <Hint texto="Valor ÚNICO de amortização extraordinária. Simula um pagamento extra em um mês específico (ex: usar 13º salário). Se não especificar o mês, será aplicado no mês 12. Reduz o saldo devedor e economiza juros futuros!" />
                 </label>
                 <input type="number" value={amortizacaoExtra} onChange={(e) => setAmortizacaoExtra(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg" placeholder="Opcional" />
@@ -554,7 +648,7 @@ const SimuladorAmortizacao = () => {
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                   Mês Amort. Extra
-                  <Tooltip texto="Em qual mês realizar a amortização extraordinária ÚNICA. Se deixar em branco, o sistema aplicará no mês 12. O pagamento é aplicado ANTES dos juros, maximizando a economia. QUANTO MAIS CEDO, MAIOR A ECONOMIA!" />
+                  <Hint texto="Em qual mês realizar a amortização extraordinária ÚNICA. Se deixar em branco, o sistema aplicará no mês 12. O pagamento é aplicado ANTES dos juros, maximizando a economia. QUANTO MAIS CEDO, MAIOR A ECONOMIA!" />
                 </label>
                 <input type="number" value={mesAmortizacaoExtra} onChange={(e) => setMesAmortizacaoExtra(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg" placeholder="Padrão: 12" />
@@ -562,7 +656,7 @@ const SimuladorAmortizacao = () => {
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                   <span className="bg-yellow-100 px-2 py-1 rounded">🔥 Amort. Mensal (R$)</span>
-                  <Tooltip texto="Valor RECORRENTE pago TODO MÊS além da prestação normal. Exemplo: pagar R$ 500 extras por mês reduz drasticamente o prazo e os juros totais. Esta é a estratégia MAIS EFICIENTE para economizar, pois amortiza desde o início!" />
+                  <Hint texto="Valor RECORRENTE pago TODO MÊS além da prestação normal. Exemplo: pagar R$ 500 extras por mês reduz drasticamente o prazo e os juros totais. Esta é a estratégia MAIS EFICIENTE para economizar, pois amortiza desde o início!" />
                 </label>
                 <input type="number" value={amortizacaoMensal} onChange={(e) => setAmortizacaoMensal(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg border-yellow-400 bg-yellow-50" placeholder="Opcional" />
@@ -760,8 +854,8 @@ const SimuladorAmortizacao = () => {
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="mes" label={{ value: 'Mês', position: 'insideBottom', offset: -5 }} />
                           <YAxis label={{ value: 'Valor (R$)', angle: -90, position: 'insideLeft' }} />
-                          <Tooltip 
-                            formatter={(value) => formatarMoeda(value)}
+                          <ReTooltip 
+                            formatter={(value) => formatarMoeda(Number(value))}
                             labelFormatter={(label) => `Mês ${label}`}
                             contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', border: '1px solid #ccc', borderRadius: '8px', padding: '10px' }}
                           />
@@ -778,13 +872,13 @@ const SimuladorAmortizacao = () => {
                         <ResponsiveContainer width="100%" height={250}>
                           <RePieChart>
                             <Pie data={prepararDadosGraficoPizza('sac')} cx="50%" cy="50%" labelLine={false}
-                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                              label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
                               outerRadius={80} dataKey="value">
-                              {prepararDadosGraficoPizza('sac').map((entry, index) => (
+                              {prepararDadosGraficoPizza('sac').map((_, index) => (
                                 <Cell key={`cell-${index}`} fill={CORES[index % CORES.length]} />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(value) => formatarMoeda(value)} />
+                            <ReTooltip formatter={(value) => formatarMoeda(Number(value))} />
                           </RePieChart>
                         </ResponsiveContainer>
                       </div>
@@ -794,13 +888,13 @@ const SimuladorAmortizacao = () => {
                         <ResponsiveContainer width="100%" height={250}>
                           <RePieChart>
                             <Pie data={prepararDadosGraficoPizza('price')} cx="50%" cy="50%" labelLine={false}
-                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                              label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
                               outerRadius={80} dataKey="value">
-                              {prepararDadosGraficoPizza('price').map((entry, index) => (
+                              {prepararDadosGraficoPizza('price').map((_, index) => (
                                 <Cell key={`cell-${index}`} fill={CORES[index % CORES.length]} />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(value) => formatarMoeda(value)} />
+                            <ReTooltip formatter={(value) => formatarMoeda(Number(value))} />
                           </RePieChart>
                         </ResponsiveContainer>
                       </div>
@@ -813,8 +907,8 @@ const SimuladorAmortizacao = () => {
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="categoria" />
                           <YAxis label={{ value: 'Valor (R$)', angle: -90, position: 'insideLeft' }} />
-                          <Tooltip 
-                            formatter={(value) => formatarMoeda(value)}
+                          <ReTooltip 
+                            formatter={(value) => formatarMoeda(Number(value))}
                             contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', border: '1px solid #ccc', borderRadius: '8px', padding: '10px' }}
                           />
                           <Legend />
@@ -831,8 +925,8 @@ const SimuladorAmortizacao = () => {
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="mes" label={{ value: 'Mês', position: 'insideBottom', offset: -5 }} />
                           <YAxis label={{ value: 'Saldo (R$)', angle: -90, position: 'insideLeft' }} />
-                          <Tooltip 
-                            formatter={(value) => formatarMoeda(value)}
+                          <ReTooltip 
+                            formatter={(value) => formatarMoeda(Number(value))}
                             labelFormatter={(label) => `Mês ${label}`}
                             contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', border: '1px solid #ccc', borderRadius: '8px', padding: '10px' }}
                           />
