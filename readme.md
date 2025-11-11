@@ -318,7 +318,7 @@ Clique em "▶ Opções Avançadas" para acessar:
 
 ### **3. Calcular:**
 
-Clique em **"🧮 Calcular Amortização"**
+Clique em **"Calcular Amortização"**
 
 ### **4. Explorar Resultados:**
 
