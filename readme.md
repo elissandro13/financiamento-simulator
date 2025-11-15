@@ -584,7 +584,6 @@ SimuladorAmortizacao (Componente Principal)
 ### **Regulamentação:**
 
 - Banco Central do Brasil - Resoluções sobre CET
-- Código de Defesa do Consumidor
 
 ---
 
@@ -647,7 +646,3 @@ Para dúvidas sobre o projeto ou conceitos financeiros, consulte:
 ## 📝 Licença Acadêmica
 
 Este projeto é de uso acadêmico para fins educacionais na UFMG.
-
----
-
-**Desenvolvido com 💙 para Administração Financeira - UFMG 2025**
