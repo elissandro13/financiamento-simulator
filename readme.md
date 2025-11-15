@@ -1,5 +1,9 @@
 # 🏦 Simulador Avançado de Sistemas de Amortização SAC vs PRICE
 
+Thiago Roberto Magalhães e Elissandro Caetano Júnior
+
+https://elissandro13.github.io/financiamento-simulator/
+
 ## 📋 Informações do Trabalho
 
 **Disciplina:** Administração Financeira (CAD 167)  
